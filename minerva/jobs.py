@@ -70,7 +70,7 @@ async def process_job(
         try:
             # Download
             if not downloaded:
-                display.job_update(file_id, "DL")
+                display.job_update(file_id, "DL", size=False)
                 await download_file(
                     url,
                     local_path,
@@ -82,7 +82,7 @@ async def process_job(
             file_size = local_path.stat().st_size
             downloaded = True
             # Upload
-            display.job_update(file_id, "UL", size=file_size or 0)
+            display.job_update(file_id, "UL", size=False, done=file_size or 0)
             await upload_file(
                 upload_server_url=upload_server_url,
                 token=token,
