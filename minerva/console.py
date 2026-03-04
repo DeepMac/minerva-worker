@@ -1,6 +1,7 @@
 import collections
 import threading
 import time
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -43,6 +44,7 @@ class WorkerDisplay:
         self._username = None
         self._leaderboard_cache: tuple[int | None, int | None] | tuple[None, None] = (None, None)
         self._leaderboard_last_fetch = 0
+        self._leaderboard_is_fetching = False
 
     def job_start(self, job: dict[str, Any], label: str) -> None:
         now = time.monotonic()
@@ -117,6 +119,7 @@ class WorkerDisplay:
             total_bytes = self._total_bytes
             dl_speed = sum(self.effective_speed(x) for x in snapshot if x["status"] == "DL")
             ul_speed = sum(self.effective_speed(x) for x in snapshot if x["status"] == "UL")
+            rank, uploaded = self._leaderboard_cache
 
         h = int(elapsed_total // 3600)
         m = int((elapsed_total % 3600) // 60)
@@ -127,19 +130,6 @@ class WorkerDisplay:
             if token:
                 token_dec = jwt.decode(token, options={"verify_signature": False})
                 self._username = token_dec.get("username", "")
-
-        if self._username:
-            if now - self._leaderboard_last_fetch > 180 or self._leaderboard_cache is None:
-                self._leaderboard_cache = next(
-                    (
-                        (x.get("rank"), x.get("total_bytes"))
-                        for x in httpx.get("https://minerva-archive.org/api/leaderboard?limit=10000").json()
-                        if x["discord_username"] == self._username
-                    ),
-                    (None, None),
-                )
-                self._leaderboard_last_fetch = now
-        rank, uploaded = self._leaderboard_cache
 
         def get_size(speed: int | float | None) -> str:
             return humanize.naturalsize(speed or 0, binary=True, gnu=False, format="%.2f").replace(" Bytes", "b")
@@ -156,6 +146,32 @@ class WorkerDisplay:
         )
 
         return stats
+
+    def update_rank(self) -> None:
+        now = time.monotonic()
+        personal_stats: tuple[int | None, int | None] | tuple[None, None] | None = None
+
+        if self._username and not self._leaderboard_is_fetching:
+            if now - self._leaderboard_last_fetch > 180 or self._leaderboard_cache is None:
+                self._leaderboard_is_fetching = True
+                try:
+                    personal_stats = next(
+                        (
+                            (x.get("rank"), x.get("total_bytes"))
+                            for x in httpx.get(
+                                "https://minerva-archive.org/api/leaderboard?limit=10000", timeout=30
+                            ).json()
+                            if x["discord_username"] == self._username
+                        ),
+                        (None, None),
+                    )
+                except (JSONDecodeError, httpx.ConnectError):
+                    pass
+                self._leaderboard_last_fetch = now
+                self._leaderboard_is_fetching = False
+        if personal_stats is not None:
+            with self._lock:
+                self._leaderboard_cache = personal_stats
 
     def __rich__(self) -> Group:
         now = time.monotonic()

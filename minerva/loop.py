@@ -33,6 +33,12 @@ async def input_loop(display: WorkerDisplay) -> None:
                 display._page -= 1
 
 
+async def update_rank_loop(display: WorkerDisplay) -> None:
+    while True:
+        display.update_rank()
+        await asyncio.sleep(1)
+
+
 async def worker_loop(
     server_url: str,
     upload_server_url: str,
@@ -229,12 +235,13 @@ async def worker_loop(
                     seen_ids.discard(job["file_id"])
                 queue.task_done()
 
-    asyncio.create_task(input_loop(display))
     with Live(display, console=console, refresh_per_second=4, screen=False):
         workers = [asyncio.create_task(worker()) for _ in range(concurrency)]
         producer_task = asyncio.create_task(producer())
+        input_loop_task = asyncio.create_task(input_loop(display))
+        update_rank_task = asyncio.create_task(update_rank_loop(display))
         try:
-            await asyncio.gather(producer_task, *workers)
+            await asyncio.gather(producer_task, input_loop_task, update_rank_task, *workers)
         except KeyboardInterrupt:
             console.print("\n[yellow]Shutting down…")
             stop_event.set()
