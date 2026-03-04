@@ -77,7 +77,9 @@ async def process_job(
                     aria2c_connections,
                     known_size,
                     pre_allocation,
-                    on_progress=lambda done, size: display.job_update(file_id=file_id, status="DL", size=size, done=done),
+                    on_progress=lambda done, size: display.job_update(
+                        file_id=file_id, status="DL", size=size, done=done
+                    ),
                 )
             file_size = local_path.stat().st_size
             downloaded = True
