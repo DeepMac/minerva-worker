@@ -194,9 +194,11 @@ class JobState:
     uploaded: int
     waiting: bool
     start_time: float
-    prev_done: int
+    prev_downloaded: int
+    prev_uploaded: int
     prev_time: float
-    speed: float
+    download_speed: float
+    upload_speed: float
 
 
 @dataclass

@@ -55,9 +55,11 @@ class WorkerDisplay:
             uploaded=0,
             waiting=True,
             start_time=now,
-            prev_done=0,
+            prev_downloaded=0,
+            prev_uploaded=0,
             prev_time=now,
-            speed=0.0,
+            download_speed=0.0,
+            upload_speed=0.0,
         )
         with self._lock:
             self.active[job.file_id] = (job, state)
@@ -77,16 +79,23 @@ class WorkerDisplay:
                 if file_id not in self.active:
                     return
                 job, state = self.active[file_id]
+                update_rates = False
+                dt = now - state.prev_time
+                if dt >= 0.5:
+                    state.prev_time = now
+                    update_rates = True
                 if downloaded is not None:
-                    dt = now - state.prev_time
-                    if dt >= 0.5:
-                        dd = downloaded - state.prev_done
-                        state.speed = dd / dt if dt > 0 else state.speed
-                        state.prev_done = downloaded
-                        state.prev_time = now
                     state.downloaded = downloaded
+                    if update_rates:
+                        dd = downloaded - state.prev_downloaded
+                        state.download_speed = dd / dt
+                        state.prev_downloaded = downloaded
                 if uploaded is not None:
                     state.uploaded = uploaded
+                    if update_rates:
+                        uu = uploaded - state.prev_uploaded
+                        state.upload_speed = uu / dt
+                        state.prev_uploaded = uploaded
                 state.status = status
                 if size is not None:
                     state.size = size
@@ -114,10 +123,10 @@ class WorkerDisplay:
             self.history.append(entry)
 
     @staticmethod
-    def effective_speed(state: JobState) -> float:
+    def effective_speeds(state: JobState) -> tuple[float, float]:
         age = time.monotonic() - state.prev_time
         decay = max(0.0, 1 - age / 3)
-        return max(0.0, state.speed * decay)
+        return (max(0.0, state.download_speed * decay), max(0.0, state.upload_speed * decay))
 
     def get_stats(self) -> Table:
         now = time.monotonic()
@@ -128,7 +137,9 @@ class WorkerDisplay:
             done_count = self._total_done
             fail_count = self._total_fails
             total_bytes = self._total_bytes
-            speed = sum(self.effective_speed(state) for _, state in snapshot)
+            dl, ul = zip((0, 0), *[self.effective_speeds(state) for _, state in snapshot])
+            download_speed = sum(dl)
+            upload_speed = sum(ul)
             rank, uploaded = self._leaderboard_cache
             username = self._username
 
@@ -146,7 +157,8 @@ class WorkerDisplay:
             f"[cyan]{username} #{rank or '--'}[/cyan] [dim]({get_size(float(uploaded or 0))})[/dim] "
             + f"Uploads: [dim]{done_count} ({get_size(total_bytes)})[/dim] "
             + f"Failures: [dim]{fail_count}[/dim]",
-            f"[blue]Speed: {get_size(speed)}/s[/blue] " + f"[dim]{h:02d}:{m:02d}:{s:02d}[/dim]",
+            f"Speed: [blue]↓ {get_size(download_speed)}/s[/blue] [green]↑ {get_size(upload_speed)}/s[/green] "
+            + f"[dim]{h:02d}:{m:02d}:{s:02d}[/dim] ",
         )
 
         return stats
@@ -226,7 +238,8 @@ class WorkerDisplay:
                 color = {"OK": "blue", "RT": "magenta"}.get(state.status, "white")
                 size = state.size
                 waiting = state.waiting
-                speed = self.effective_speed(state)
+                dl, ul = self.effective_speeds(state)
+                speed = dl + ul
                 elapsed = now - state.start_time
                 elapsed_str = f"[dim]{int(elapsed // 60):02d}:{int(elapsed % 60):02d}[/dim]"
 
