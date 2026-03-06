@@ -55,27 +55,16 @@ You can configure the worker settings by running `minerva run --help` to see wha
 you can change. If you have a great computer and network, it's recommended to bump up the -c and -b
 options.
 
-> [!TIP]
-It's recommended to keep -c smaller or the same as -b.
-
 ## How it works
 
 The worker script asks the minerva server for jobs to download. The server gives active workers random
 missing needed file URLs to download. When the worker is given a job, it temporarily downloads the file
 and uploads it to the minerva file servers. Once the file is downloaded, it is deleted from your machine.
 
-> [!TIP]
-If you also want a copy of the files, use the `--keep-files` setting.
-
 Jobs are given exclusively to each worker, no two workers download the same file at the same time. However,
 to verify that uploads aren't corrupted, each job gets given (eventually) to a second worker. Both uploads
 are then confirmed and if both workers give back the same file to the minerva file server, then the job is
 marked as complete and verified.
-
-> [!NOTE]
-You may see 409 Conflict errors on upload, this happens when either you or another worker had mismatching
-files uploaded. Just ignore these error's and let the worker continue. If you suspect every file has this
-issue, please verify your network connection is stable and verify your downloads arent corrupted.
 
 ## Discord Authentication
 
@@ -94,6 +83,9 @@ To change the settings of the worker, you can set the following environment vari
 
 - `--server`: `MINERVA_SERVER`
 - `-c/--concurrency`: `MINERVA_CONCURRENCY`
+- `-r/--retries`: `MINERVA_RETRIES`
+- `--min-job-size`: `MINERVA_MIN_JOB_SIZE`
+- `--max-job-size`: `MINERVA_MAX_JOB_SIZE`
 
 There are more advanced environment variables available, you can find them listed in
 [constants.py](/minerva/constants.py).
@@ -107,12 +99,15 @@ There are more advanced environment variables available, you can find them liste
 
 There's two ways to go about this,
 
-- either run the normal python script to authenticate with it,
+- enable tty/interactivity and run minerva normally, see [Terminal Interactity](#terminal-interactivity),
 - or, get and save the token to a specific location manually.
 
-To get the token manually, go to <https://api.minerva-archive.org/auth/discord/login> and you will get a
-token value once you authorize with Discord. Copy that token value and save it to `~/.minerva-dpn/token`
-on Linux/macOS, or save it to `%USERPROFILE%/.minerva-dpn/token` on Windows.
+To get the token manually, go to the following link to authorize with discord and the API:  
+<https://discord.com/oauth2/authorize?client_id=1478862142793977998&response_type=code&redirect_uri=https%3A%2F%2Ffirehose.minerva-archive.org%2Fcode&scope=identify>
+
+Copy the token value the page gives you and save it to `~/.minerva-dpn/token` on Linux/macOS,
+or save it to `%USERPROFILE%/.minerva-dpn/token` on Windows. Make sure the file is saved as
+UTF-8 encoding, without BOM.
 
 The token file must stay there at all times for the Docker container to have it. The location where the
 token needs to be can be changed, just make sure you change the volume location and environment variable
@@ -143,6 +138,35 @@ When these are enabled, you may prefer to use `docker attach <container_name>` i
 
 > [!TIP]
 To safely detach from an attached container without stopping it, use the key sequence `CTRL + P` then `CTRL + Q`.
+
+## Troubleshooting
+
+Before continuing, make sure you are using the worker installed using the instructions above. Delete any `minerva.py` file you may have as your terminal might run that when calling `minerva` instead of the pip package installed as instructed above. Also double check that your Python version is `3.10.0` or newer with `python --version`. If you use `python3`, try `python` and see if one or the other is newer.
+
+1. `This environment is externally managed`
+
+You use a Linux system that prevents `pip` from modifying the Python environment to avoid breaking packages used by the OS.
+Instead, install `pipx`, for example with `sudo apt install pipx`, then run `pipx ensurepath`.
+Now install the worker by calling `pipx install minerva-worker`.
+
+2. Other `pip`-related installation issues
+
+Commands like `pip install minerva-worker` must be run in a Terminal/Command Prompt, not typed into a Python script, Python shell, Notepad, Windows Run, or any other program. We highly recommend using `Microsoft Terminal` on both Windows or Linux as it plays really well with the UI.
+
+3. `minerva` was not found
+
+This happens because Python installs command scripts into a Scripts directory that may not be in your System PATH Environment Variable.
+
+It's typical location on Windows would be in:
+`C:\Users\<username>\AppData\Local\Programs\Python\PythonXXX\Scripts` where `<username>` is your Windows Username and `PythonXXX` is your Python version, e.g. "Python314".
+
+Add this location to the `PATH` environment variable listed under `User variables` in the "Environment Variables" settings window. In your start menu search "Environment variables", open it, and click "Edit environment variables". If you need assistance I recommend searching for a guide online.
+
+4. The interface is laggy, buggy, or similar.
+
+On Windows, I highly recommend using [Windows Terminal](https://github.com/microsoft/terminal) with the latest version of [PowerShell](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5). If you're running the worker in a shell or command prompt that has a bright blue background, your using an old version of PowerShell and are going to have a bad time.
+
+On Linux or macOS, I have no preferences or recommendation to share, but I recommend looking around. If you are running the worker in a less typical environment or device, like Docker or cloud-based terminals, you may unfortunately be stuck with having a slow or glitchy UI.
 
 ## Development
 
