@@ -50,14 +50,14 @@ async def input_loop(display: WorkerDisplay) -> None:
                 display._page -= 1
 
 
-async def update_rank_loop(display: WorkerDisplay) -> None:
+async def update_rank_loop(display: WorkerDisplay, server: str) -> None:
     while True:
         try:
-            display.update_rank()
+            display.update_rank(server)
         except Exception:
             # Just in case one error misses a catch → asyncio voids it otherwise
             console.print_exception()
-        await asyncio.sleep(20)
+        await asyncio.sleep(10)
 
 
 async def worker_loop(
@@ -108,9 +108,9 @@ async def worker_loop(
     with Live(display, console=console, refresh_per_second=4, screen=False):
         while True:
             console.print("Trying to connect to the coordinator server...")
-            display.connected = False
-            if had_connection:
+            if display.connected or not display.downtime:
                 display.downtime = time.monotonic()
+            display.connected = False
             try:
                 connection = await websockets.connect(
                     f"wss://{server.replace('https://', '')}{WORKER_ENDPOINT}",
@@ -347,7 +347,7 @@ async def worker_loop(
                     websocket_receiver(websocket, chunk_response_queue, job_response_futures, job_response_lock)
                 )
                 producer_task = asyncio.create_task(producer())
-                update_rank_task = asyncio.create_task(update_rank_loop(display))
+                update_rank_task = asyncio.create_task(update_rank_loop(display, server))
                 input_loop_task = None
 
                 if sys.stdin.isatty():

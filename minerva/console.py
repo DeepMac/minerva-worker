@@ -1,3 +1,4 @@
+import base64
 import collections
 import threading
 import time
@@ -12,7 +13,8 @@ from rich.console import Console, Group
 from rich.table import Table
 from rich.text import Text
 
-from minerva.constants import HISTORY_LINES
+from minerva.auth import load_token
+from minerva.constants import HISTORY_LINES, LEADERBOARD_ENDPOINT, USER_AGENT
 from minerva.ws_message import ChunkInfo, JobState
 
 console = Console()
@@ -30,7 +32,7 @@ class WorkerDisplay:
     """
 
     def __init__(self) -> None:
-        self._leaderboard_last_fetch = 0  # Only use in update_rank_loop (update_rank)
+        self._leaderboard_last_fetch = 0.0  # Only use in update_rank_loop (update_rank)
 
         # All following variables are locked by _lock
         self.history: collections.deque = collections.deque(maxlen=HISTORY_LINES)
@@ -44,6 +46,7 @@ class WorkerDisplay:
         self._total_fails = 0
         self._total_bytes = 0
         self._username = None
+        self._discord_id = None
         self._leaderboard_cache: tuple[int | None, int | None] | tuple[None, None] = (None, None)
 
     def job_start(self, job: ChunkInfo, label: str) -> None:
@@ -186,24 +189,48 @@ class WorkerDisplay:
 
         return stats
 
-    def update_rank(self) -> None:
+    def update_rank(self, server: str) -> None:
         now = time.monotonic()
         personal_stats: tuple[int | None, int | None] | tuple[None, None] | None = None
 
         with self._lock:
             previous_leaderboard = self._leaderboard_cache
+            if not self._username or not self._discord_id:
+                token = load_token()
+                r = httpx.get(
+                    url="https://discord.com/api/users/@me",
+                    headers={
+                        "Authorization": f"Bearer {token}"
+                    },
+                    timeout=30,
+                )
+                if not r.is_success:
+                    console.print(f"[yellow]Unable to fetch Discord Username ({r.status_code})[/yellow]")
+                    return
+                data = r.json()
+                self._username = data["global_name"]
+                self._discord_id = data["id"]
             username = self._username
+            discord_id = self._discord_id
 
-        if username:
+        if username and discord_id:
             if now - self._leaderboard_last_fetch > 180 or previous_leaderboard is None:
                 try:
+                    res = httpx.get(
+                        url=f"{server}{LEADERBOARD_ENDPOINT}",
+                        headers={
+                            "User-Agent": USER_AGENT
+                        },
+                        timeout=30,
+                    )
+                    leaderboard = sorted(res.json(), key=lambda x: x["downloaded_bytes"], reverse=True)
+                    for rank, item in enumerate(leaderboard, start=1):
+                        item["rank"] = rank
                     personal_stats = next(
                         (
-                            (x.get("rank"), x.get("total_bytes"))
-                            for x in httpx.get(
-                                "https://minerva-archive.org/api/leaderboard?limit=10000", timeout=30
-                            ).json()
-                            if x["discord_username"] == username
+                            (x["rank"], x["downloaded_bytes"] or 0.0)
+                            for x in leaderboard
+                            if x["discord_username"] == username and discord_id in x["avatar_url"]
                         ),
                         (None, None),
                     )
