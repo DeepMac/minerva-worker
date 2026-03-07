@@ -9,7 +9,6 @@ import httpx
 import humanize
 from rich import box
 from rich.console import Console, Group
-from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
@@ -158,24 +157,31 @@ class WorkerDisplay:
         leaderboard_stats = f"[cyan]{username} #{rank or '--'}[/cyan] [dim]({get_size(float(uploaded or 0))})[/dim]"
         upload_stats = f"Uploads: [dim]{done_count} ({get_size(total_bytes)})[/dim]"
         fail_stats = f"Failures: [dim]{fail_count}[/dim]"
+        uptime = f"Uptime: [dim]{self.get_timestamp(self._session_start)}[/dim]"
 
         connection_stats = ""
         if self.connected:
             connection_stats = (
-                f"Speed: [blue]↓ {get_size(download_speed)}/s[/blue] [green]↑ {get_size(upload_speed)}/s[/green] "
-                + f"[dim]{self.get_timestamp(self._session_start)}[/dim]"
+                f"Speed: [blue]↓ {get_size(download_speed)}/s[/blue] [green]↑ {get_size(upload_speed)}/s[/green]"
             )
         elif self.downtime < 1:
             connection_stats = "[cyan]Connecting...[/cyan]"
         else:
             connection_stats = f"[red]Down for {self.get_timestamp(self.downtime, in_seconds=True)}s[/red]"
 
-        stats = Table.grid(expand=True)
-        stats.add_column(justify="left")
+        stats = Table(
+            box=box.HEAVY_HEAD,
+            show_header=False,
+            expand=True,
+            border_style="dim",
+        )
+        stats.add_column(justify="left", ratio=1)
         stats.add_column(justify="right")
+        stats.add_column(justify="right", width=16)
         stats.add_row(
             f"{leaderboard_stats} {upload_stats} {fail_stats}",
-            connection_stats,
+            f"{connection_stats} ",
+            uptime,
         )
 
         return stats
@@ -309,9 +315,7 @@ class WorkerDisplay:
 
         if history_lines:
             parts.extend(Text.from_markup(line) for line in history_lines)
-            parts.append(Rule(style="dim"))
         parts.append(self.get_stats())
-        parts.append(Rule(style="dim"))
         parts.append(table)
 
         if pages > 1:
