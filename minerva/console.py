@@ -226,10 +226,10 @@ class WorkerDisplay:
             username = self._username
             discord_id = self._discord_id
 
-        if not username and not discord_id:
+        if not username or not discord_id:
             username, discord_id = await self._get_user_info()
 
-        if not username and not discord_id:
+        if not username or not discord_id:
             return None
 
         if now - self._leaderboard_last_fetch > 180 or previous_leaderboard is None:
