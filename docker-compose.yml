@@ -18,6 +18,7 @@ services:
       MINERVA_CONCURRENCY: 10
     volumes:
       - ${HOME}/.minerva-dpn/:/root/.minerva-dpn
+    restart: unless-stopped
 
 volumes:
   data:
